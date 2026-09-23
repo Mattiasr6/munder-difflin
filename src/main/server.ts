@@ -106,19 +106,23 @@ function buildHandlers(): Map<string, Handler> {
       throw httpErr('ERR-W07', `engine CLI not installed: ${bin}`, 503);
     }
     const full: Record<string, unknown> = { ...(opts as Record<string, unknown>), id, cwd: expandTilde(cwd), command };
-    // Desktop Add-agent manda hive meta: provisionar igual que hive.spawn para que
-    // el agente quede registrado (floor/tasks/inbox) y no sea una PTY cruda.
+    // Desktop manda hive meta con SU propio id (god: PTY pty-god, agente god).
+    // Se registra el agente con meta.id y se mapea PTY→agente como en desktop.
     let seedPrompt: string | null = null;
-    const meta = (full.hive ?? null) as { id?: unknown; name?: unknown; provider?: unknown; role?: unknown } | null;
+    let agentId = id;
+    const meta = (full.hive ?? null) as { id?: unknown; name?: unknown; provider?: unknown; role?: unknown; isGod?: unknown; isAssistant?: unknown } | null;
     if (meta && typeof meta === 'object' && core.hive.enabled()) {
       const provider = normalizeAgentProvider(meta.provider) ?? 'claude';
+      if (typeof meta.id === 'string' && meta.id && meta.id !== id) agentId = meta.id;
       const inj = await core.hive.ensureAgent(
         {
-          id,
-          name: typeof meta.name === 'string' && meta.name ? meta.name : id,
+          id: agentId,
+          name: typeof meta.name === 'string' && meta.name ? meta.name : agentId,
           provider,
           cwd: full.cwd as string,
-          role: typeof meta.role === 'string' && meta.role ? meta.role : 'agent'
+          role: typeof meta.role === 'string' && meta.role ? meta.role : 'agent',
+          isGod: meta.isGod === true,
+          isAssistant: meta.isAssistant === true
         },
         { semanticMemory: core.memory.active(), theme: 'dark' }
       );
@@ -127,8 +131,20 @@ function buildHandlers(): Map<string, Handler> {
       seedPrompt = inj.seedPrompt ?? null;
     }
     const res = core.pty.spawn(full as never, null);
-    if (meta && typeof meta === 'object') broadcast?.('hive:agentSpawned', { id });
-    return { ...res, ...(seedPrompt ? { seedPrompt } : {}) };
+    if (meta && typeof meta === 'object') {
+      core.ptyToAgent.set(id, agentId);
+      broadcast?.('hive:agentSpawned', {
+        id: agentId,
+        name: typeof meta.name === 'string' && meta.name ? meta.name : agentId,
+        provider: normalizeAgentProvider(meta.provider) ?? 'claude',
+        cwd: full.cwd,
+        role: typeof meta.role === 'string' ? meta.role : undefined,
+        isGod: meta.isGod === true,
+        isAssistant: meta.isAssistant === true,
+        ptyId: id,
+      });
+    }
+    return { ...res, agentId, ...(seedPrompt ? { seedPrompt } : {}) };
   });
   h.set('pty.write', (p, core) => {
     if (!core.ptyAvailable || !core.pty) throw httpErr('ERR-W07', 'node-pty unavailable', 503);
@@ -155,8 +171,10 @@ function buildHandlers(): Map<string, Handler> {
     const id = needStr(p.id);
     if (!id) throw httpErr('ERR-W03', 'pty.kill needs {id}', 400);
     const r = core.pty.kill(id);
-    try { core.hive.setArchived(id, true); } catch { /* PTY cruda: no-op */ }
-    broadcast?.('hive:agentArchived', { id });
+    const agentId = core.ptyToAgent.get(id) ?? id;
+    core.ptyToAgent.delete(id);
+    try { core.hive.setArchived(agentId, true); } catch { /* PTY cruda: no-op */ }
+    broadcast?.('hive:agentArchived', { id: agentId });
     return r;
   });
   h.set('pty.list', (_p, core) => {
@@ -195,6 +213,7 @@ function buildHandlers(): Map<string, Handler> {
       throw httpErr('ERR-W03', 'hive.spawn needs agent.{id,name,cwd}', 400);
     }
     const id = rawId.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 48);
+    const ptyId = `pty-${id}`;
     const provider = normalizeAgentProvider(a.provider) ?? 'claude';
     const preset = providerPreset(provider);
     const cmdLine = typeof a.command === 'string' && a.command.trim() ? a.command.trim() : preset.defaultCommand;
@@ -208,12 +227,23 @@ function buildHandlers(): Map<string, Handler> {
       { semanticMemory: core.memory.active(), theme: 'dark' }
     );
     const res = core.pty.spawn(
-      { id, cwd, command: bin, args: [...extraArgs, ...inj.args], env: { ...inj.env }, cols: 100, rows: 30 } as never,
+      { id: ptyId, cwd, command: bin, args: [...extraArgs, ...inj.args], env: { ...inj.env }, cols: 100, rows: 30 } as never,
       null
     );
     if (!res.ok) throw httpErr('ERR-W05', res.error ?? 'spawn failed', 500);
-    broadcast?.('hive:agentSpawned', { id });
-    return { ok: true, ptyId: id, agentId: id, seedPrompt: inj.seedPrompt ?? null };
+    core.ptyToAgent.set(ptyId, id);
+    const reg = core.hive.registry().agents[id];
+    broadcast?.('hive:agentSpawned', {
+      id,
+      name: reg?.name ?? id,
+      provider: reg?.provider ?? normalizeAgentProvider((a as Record<string, unknown>).provider) ?? 'claude',
+      cwd,
+      role: reg?.role,
+      isGod: reg?.isGod === true,
+      isAssistant: reg?.isAssistant === true,
+      ptyId,
+    });
+    return { ok: true, ptyId, agentId: id, seedPrompt: inj.seedPrompt ?? null };
   });
   h.set('hive.memoryStatus', (_p, core) => core.memory.refresh());
   h.set('hive.searchMemory', async (p, core) => {
@@ -601,7 +631,9 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   }
   try {
     const data = readFileSync(target);
-    res.writeHead(200, { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' });
+    const headers: Record<string, string> = { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' };
+    if (target.endsWith('.html')) headers['cache-control'] = 'no-store';
+    res.writeHead(200, headers);
     res.end(data);
   } catch {
     res.writeHead(500).end('read error');

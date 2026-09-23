@@ -121,12 +121,13 @@ function AddAgentForm({ cwdDefault, onSpawned }: { cwdDefault: string; onSpawned
       const res = await cth.request<{ ptyId?: string; seedPrompt?: string | null }>('hive.spawn', {
         agent: { id, name: clean, provider, cwd: cwd.trim() || '.', role: 'agent' },
       });
+      const spawnedPty = res.ptyId ?? id;
       if (res.seedPrompt) {
         setTimeout(() => {
-          void cth.request('pty.write', { id, data: `${res.seedPrompt}\r` }).catch(() => undefined);
+          void cth.request('pty.write', { id: spawnedPty, data: `${res.seedPrompt}\r` }).catch(() => undefined);
         }, 2000);
       }
-      onSpawned(res.ptyId ?? id);
+      onSpawned(spawnedPty);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'spawn failed');
       setBusy(false);

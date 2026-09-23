@@ -52,6 +52,9 @@ export interface CoreServices {
   hooks: HookServer;
   persist: PersistStore | null;
   stop: () => void;
+  /** PTY id → agent id (como ptyToAgent en index.ts desktop). El PTY y el
+   *  agente pueden tener ids distintos (god: PTY pty-god, agente god). */
+  ptyToAgent: Map<string, string>;
 }
 
 /**
@@ -112,6 +115,7 @@ export function createCore(emit: PushEmit): CoreServices {
   // coincide (Docker sin rebuild) el core SIGUE vivo y el método responde el
   // error contractado en vez de tumbar el proceso al importar.
   const require = createRequire(__filename);
+  const ptyToAgent = new Map<string, string>();
   let pty: PtyManager | null = null;
   let ptyAvailable = false;
   try {
@@ -127,9 +131,10 @@ export function createCore(emit: PushEmit): CoreServices {
     (pty as unknown as { attachWebContents: (wc: WebContents) => void }).attachWebContents(sink);
     pty.setExitHandler((id, exitCode, info) => {
       console.log(`[web] pty exit ${id} code=${exitCode ?? '?'} cmd=${info?.command ?? '?'}`);
-      // hive.spawn usa el mismo id para PTY y agente: archivar al morir para que
-      // el floor no muestre agentes muertos como activos (no-op para PTYs crudas).
-      try { hive.setArchived(id, true); } catch { /* best-effort */ }
+      const agentId = ptyToAgent.get(id) ?? id;
+      ptyToAgent.delete(id);
+      try { hive.setArchived(agentId, true); } catch { /* best-effort */ }
+      emit('hive:agentArchived', { id: agentId });
     });
   } catch (e) {
     console.error('[web] node-pty unavailable (ERR-W07 on pty.spawn):', e instanceof Error ? e.message : String(e));
@@ -155,9 +160,8 @@ export function createCore(emit: PushEmit): CoreServices {
     } catch { /* noop */ }
   };
 
-  return { pty, ptyAvailable, hive, telemetry, control, breaker, memory, roster, hooks, persist, stop };
+  return { pty, ptyAvailable, hive, telemetry, control, breaker, memory, roster, hooks, persist, stop, ptyToAgent };
 }
-
 /** Arranca los servicios ligados al hive. Todo best-effort con log, nunca throw. */
 export function startCore(core: CoreServices): void {
   try { core.persist?.open(); } catch (e) {

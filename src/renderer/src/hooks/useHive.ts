@@ -1010,8 +1010,23 @@ export function useHive(config: HarnessConfig | null): void {
     if (!config?.onboardingComplete) return;
     const offSpawn = window.cth.onHiveAgentSpawned?.((rec) => {
       if (!rec?.id) return;
-      // addAgent is idempotent, but bail early if the renderer already carded it.
-      if (useStore.getState().agents.some((a) => a.id === rec.id)) return;
+      const r = rec as typeof rec & { ptyId?: unknown; isGod?: unknown };
+      // El gateway web manda el registro (id, name, provider, cwd, role, isGod,
+      // ptyId); el spawn de voz en desktop manda menos. Completar desde rec y,
+      // si la tarjeta ya existe (p. ej. god restaurado sin isGod), corregirla.
+      const patch: Partial<Agent> = {};
+      if (r.ptyId && typeof r.ptyId === 'string') patch.ptyId = r.ptyId;
+      if (r.isGod === true) patch.isGod = true;
+      if (rec.name && typeof rec.name === 'string') patch.name = rec.name;
+      if (rec.cwd && typeof rec.cwd === 'string') patch.cwd = rec.cwd;
+      if (rec.provider && typeof rec.provider === 'string') {
+        patch.provider = rec.provider as Agent['provider'];
+      }
+      const existing = useStore.getState().agents.some((a) => a.id === rec.id);
+      if (existing) {
+        if (Object.keys(patch).length) useStore.getState().updateAgent(rec.id, patch);
+        return;
+      }
       // An explicit character wins; otherwise infer it from the name, which is
       // what makes "spawn one called Meredith" land on the Meredith avatar with
       // nothing else asked for. The explicit field covers what inference cannot
@@ -1043,10 +1058,10 @@ export function useHive(config: HarnessConfig | null): void {
         action: 'starting up',
         progress: 0,
         currentStation: 'desk',
-        ptyId: rec.id,
+        ptyId: (r.ptyId && typeof r.ptyId === 'string' ? r.ptyId : undefined) ?? rec.id,
         command: rec.command,
         provider: rec.provider as Agent['provider'],
-        isGod: false,
+        isGod: r.isGod === true,
         recentTextTs: Date.now()
       };
       useStore.getState().addAgent(agent);
