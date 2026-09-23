@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mis agentes — Munder Difflin</title>
+    <!-- Standalone web entry (spec v1.2, tailnet single-user). Boot SOLO MisAgentes
+         vía cthClient (WS); nunca toca window.cth ni la app desktop.
+         connect-src permite ws:/wss: a la IP tailnet + self (mismo origen). -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; media-src 'self' blob:;" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/agentes.tsx"></script>
+  </body>
+</html>

@@ -335,6 +335,14 @@ export interface HarnessConfig {
   slackChannelId?: string;
   /** Local HTTP port the webhook server binds to (default 3847). */
   slackPort?: number;
+  /** Headless web mode (tailnet, spec v1.2): interfaz de escucha. Env
+   *  WEB_HOST gana. Default '0.0.0.0' (ver WEB_DEFAULT_HOST en webBridge). */
+  webHost?: string;
+  /** Headless web mode: puerto de escucha. Env WEB_PORT gana. Default 8888. */
+  webPort?: number;
+  /** Headless web mode: MagicDNS extra permitido en Host/Origin. Env
+   *  WEB_HOSTNAMES (coma-separado) gana. 100.78.144.4 + loopback van siempre. */
+  webHostnames?: string[];
   /** Opt-in: allow APP/VOICE-INITIATED proactive posting into Slack (e.g. the
    *  renderer's "queued" acknowledgement). DEFAULT OFF per the human directive
    *  "stop posting into Slack by default". This does NOT gate the Slack-ORIGIN

@@ -10,6 +10,7 @@ import { useGodNameSync } from '@/i18n/useGodNameSync';
 import { useDirectionSync } from '@/i18n/useDirection';
 import { useArabicTerminalSync } from '@/terminal/useArabicTerminalSync';
 import { MemoryPanel } from '@/components/MemoryPanel';
+import { MisAgentes } from '@/views/MisAgentes';
 import { AgentDetailPanel } from '@/components/AgentDetailPanel';
 import { AgentStrip } from '@/components/AgentStrip';
 import { AddAgentModal } from '@/components/AddAgentModal';
@@ -79,6 +80,12 @@ export function App() {
   const [quitWarn, setQuitWarn] = useState<{ ptyCount: number } | null>(null);
   const [closing, setClosing] = useState<ClosingTimeState | null>(null);
   const [vpWidth, setVpWidth] = useState<number>(window.innerWidth);
+  const [isAgentes, setIsAgentes] = useState(() => window.location.hash.startsWith('#/agentes'));
+  useEffect(() => {
+    const onHash = (): void => setIsAgentes(window.location.hash.startsWith('#/agentes'));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   // Deep link into Settings from anywhere in the tree. Settings' open state is
   // local to App, so a nested control (e.g. "set it now" beside a disabled Talk
@@ -251,6 +258,10 @@ export function App() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  if (isAgentes) {
+    return <MisAgentes />;
+  }
 
   if (!config) {
     return <div style={{ width: '100vw', height: '100vh', background: 'var(--cth-cream-100)' }} />;

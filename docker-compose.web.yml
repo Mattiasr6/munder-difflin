@@ -1,0 +1,23 @@
+# Oficina headless en tailnet — spec v1.2. Sin tailscale serve/funnel/tunnelmole:
+# el contenedor escucha en 0.0.0.0:8888 y el firewall deja pasar SOLO tailscale0.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: munder-difflin-web:0.4.6
+    ports:
+      - "8888:8888"
+    environment:
+      WEB_HOST: "0.0.0.0"
+      WEB_PORT: "8888"
+      WEB_TOKEN: "${WEB_TOKEN:?define WEB_TOKEN en .env o entorno}"
+      HARNESS_HOME: "/data"
+      # Ollama remoto en otro nodo tailnet, p. ej. http://100.x.y.z:11434
+      OLLAMA_HOST: "${OLLAMA_HOST:-}"
+    volumes:
+      - harness-data:/data
+    restart: unless-stopped
+
+volumes:
+  harness-data:
