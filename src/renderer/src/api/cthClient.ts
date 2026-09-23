@@ -110,8 +110,26 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>;
 }
 
-export function defaultWsUrl(): string {
-  if (typeof window !== 'undefined') {
+/** Saca ?token= de la URL, lo guarda en sessionStorage y lo borra de la barra.
+ *  Permite entrar con un link sin tocar la consola. Devuelve el token o ''. */
+export function consumeUrlToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const q = new URLSearchParams(window.location.search).get('token')?.replace(/\s+/g, '') ?? '';
+    if (!q) return '';
+    try {
+      window.sessionStorage.setItem(TOKEN_KEY, q);
+    } catch { /* sin storage: se usa solo esta vez */ }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('token');
+    window.history.replaceState(null, '', url.toString());
+    return q;
+  } catch {
+    return '';
+  }
+}
+
+export function defaultWsUrl(): string {  if (typeof window !== 'undefined') {
     try {
       const saved = window.localStorage.getItem(URL_KEY);
       if (saved) return saved;
@@ -234,10 +252,12 @@ export class CthApi {
   private buildUrl(): string {
     const base = defaultWsUrl();
     if (typeof window === 'undefined') return base;
-    let token = '';
-    try {
-      token = window.sessionStorage.getItem(TOKEN_KEY) ?? '';
-    } catch { /* sin storage */ }
+    let token = consumeUrlToken();
+    if (!token) {
+      try {
+        token = window.sessionStorage.getItem(TOKEN_KEY) ?? '';
+      } catch { /* sin storage */ }
+    }
     if (!token) return base;
     const sep = base.includes('?') ? '&' : '?';
     return `${base}${sep}token=${encodeURIComponent(token)}`;

@@ -1,5 +1,7 @@
 import { installWebCth } from './api/webCth';
+import { consumeUrlToken } from './api/cthClient';
 installWebCth();
+consumeUrlToken();
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';

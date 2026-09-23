@@ -3,7 +3,10 @@
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useTranslation } from 'react-i18next';
+import { consumeUrlToken } from '@/api/cthClient';
 import { MisAgentes } from '@/views/MisAgentes';
+
+consumeUrlToken();
 
 const TOKEN_KEY = 'cth.token';
 
