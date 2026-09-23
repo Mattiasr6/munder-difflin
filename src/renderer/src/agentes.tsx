@@ -2,28 +2,30 @@
 // No importa App.tsx ni nada que toque window.cth.
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { useTranslation } from 'react-i18next';
 import { MisAgentes } from '@/views/MisAgentes';
 
 const TOKEN_KEY = 'cth.token';
 
 function TokenGate({ onSaved }: { onSaved: () => void }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [hint, setHint] = useState('');
   const save = (): void => {
-    const t = value.replace(/\s+/g, '');
-    if (!t) {
-      setHint('Pega el WEB_TOKEN (sin espacios).');
+    const token = value.replace(/\s+/g, '');
+    if (!token) {
+      setHint(t('web.tokenHint'));
       return;
     }
     try {
-      window.sessionStorage.setItem(TOKEN_KEY, t);
+      window.sessionStorage.setItem(TOKEN_KEY, token);
     } catch { /* sin storage: sigue en memoria de la pestaña */ }
     onSaved();
   };
   return (
     <div style={{ padding: 32, fontFamily: 'system-ui, sans-serif', maxWidth: 420 }}>
-      <h1 style={{ fontSize: 18 }}>Mis agentes</h1>
-      <p>Pega el WEB_TOKEN del servidor para conectar por la tailnet.</p>
+      <h1 style={{ fontSize: 18 }}>{t('web.title')}</h1>
+      <p>{t('web.tokenPrompt')}</p>
       <input
         type="password"
         value={value}
@@ -34,7 +36,7 @@ function TokenGate({ onSaved }: { onSaved: () => void }) {
         style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
       />
       <div style={{ marginTop: 12 }}>
-        <button type="button" onClick={save}>Conectar</button>
+        <button type="button" onClick={save}>{t('web.connect')}</button>
         {hint ? <p role="alert">{hint}</p> : null}
       </div>
     </div>

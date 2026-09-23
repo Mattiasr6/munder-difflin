@@ -1,6 +1,7 @@
 // Vista /agentes "Mis agentes" (spec v1.2): Floor + Worktrees + Hive + terminal live.
 // Consume el contrato src/shared/webBridge.ts vía api/cthClient (WS o window.cth).
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CSSProperties } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -102,6 +103,7 @@ function WebLiveTerminal({ ptyId }: { ptyId: string }) {
 const PROVIDERS = ['opencode', 'gemini', 'copilot', 'agy', 'claude', 'codex', 'qwen'];
 
 function AddAgentForm({ cwdDefault, onSpawned }: { cwdDefault: string; onSpawned: (ptyId: string) => void }) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('opencode');
   const [cwd, setCwd] = useState(cwdDefault);
@@ -137,11 +139,11 @@ function AddAgentForm({ cwdDefault, onSpawned }: { cwdDefault: string; onSpawned
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') void spawn(); }}
-        placeholder="Agent name (e.g. Pam)"
-        aria-label="Agent name"
+        placeholder={t('web.agentName')}
+        aria-label={t('web.agentName')}
         style={{ padding: 6 }}
       />
-      <select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label="Provider">
+      <select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label={t('web.provider')}>
         {PROVIDERS.map((p) => (
           <option key={p} value={p}>{p}</option>
         ))}
@@ -149,12 +151,12 @@ function AddAgentForm({ cwdDefault, onSpawned }: { cwdDefault: string; onSpawned
       <input
         value={cwd}
         onChange={(e) => setCwd(e.target.value)}
-        placeholder="Working dir"
-        aria-label="Working dir"
+        placeholder={t('web.workingDir')}
+        aria-label={t('web.workingDir')}
         style={{ padding: 6, minWidth: 220 }}
       />
       <button type="button" onClick={() => void spawn()} disabled={busy || !name.trim()}>
-        {busy ? 'Spawning…' : 'Add agent'}
+        {busy ? t('web.spawning') : t('web.addAgent')}
       </button>
       {err ? <span role="alert">{err}</span> : null}
     </div>
@@ -162,6 +164,7 @@ function AddAgentForm({ cwdDefault, onSpawned }: { cwdDefault: string; onSpawned
 }
 
 export function MisAgentes() {
+  const { t } = useTranslation();
   const [ui, setUi] = useState<UiState>('loading');
   const [error, setError] = useState('');
   const [cwd, setCwd] = useState('.');
@@ -262,7 +265,7 @@ export function MisAgentes() {
   if (ui === 'loading') {
     return (
       <div style={{ padding: 24 }}>
-        <p>Loading agents…</p>
+        <p>{t('web.loading')}</p>
       </div>
     );
   }
@@ -276,10 +279,10 @@ export function MisAgentes() {
     };
     return (
       <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p role="alert">Couldn&apos;t reach the hive: {error}</p>
+        <p role="alert">{t('web.unreachable', { error })}</p>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={() => void load()}>Retry</button>
-          <button type="button" onClick={resetToken}>Usar otro token</button>
+          <button type="button" onClick={() => void load()}>{t('web.retry')}</button>
+          <button type="button" onClick={resetToken}>{t('web.useAnotherToken')}</button>
         </div>
       </div>
     );
@@ -288,29 +291,29 @@ export function MisAgentes() {
   if (ui === 'empty') {
     return (
       <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p>No agents on the floor yet.</p>
+        <p>{t('web.empty')}</p>
         <AddAgentForm cwdDefault={cwd} onSpawned={onSpawned} />
-        <button type="button" onClick={() => void load()}>Refresh</button>
+        <button type="button" onClick={() => void load()}>{t('web.refresh')}</button>
       </div>
     );
   }
 
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, height: '100vh', overflow: 'auto' }}>
-      <h1 style={{ margin: 0 }}>Mis agentes {isElectron ? '(electron)' : '(web)'}</h1>
+      <h1 style={{ margin: 0 }}>{t('web.title')} {isElectron ? '(electron)' : '(web)'}</h1>
       <AddAgentForm cwdDefault={cwd} onSpawned={onSpawned} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'start' }}>
         <section style={panelStyle} aria-label="Floor">
-          <h2 style={hStyle}>FLOOR</h2>
+          <h2 style={hStyle}>{t('web.floor')}</h2>
           {isElectron ? (
-            <Suspense fallback={<p style={{ margin: 0 }}>Loading floor…</p>}>
+            <Suspense fallback={<p style={{ margin: 0 }}>{t('web.loading')}</p>}>
               <OfficeFloor />
             </Suspense>
           ) : (
             <p style={{ margin: 0 }}>
-              Floor scene runs in Electron.{' '}
-              <a href="#/">Open the floor</a> or manage agents below.
+              {t('web.floorElectronOnly')}{' '}
+              <a href="#/">{t('web.openFloor')}</a> {t('web.orManageBelow')}
             </p>
           )}
           <ul>
@@ -324,20 +327,20 @@ export function MisAgentes() {
         </section>
 
         <section style={panelStyle} aria-label="Worktrees">
-          <h2 style={hStyle}>WORKTREES ({str(cwd)})</h2>
+          <h2 style={hStyle}>{t('web.worktrees', { cwd })}</h2>
           <ul>
             {worktrees.map((w, i) => (
               <li key={w.path ?? i}>{w.path} — {w.branch}</li>
             ))}
           </ul>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{gitStatus}</pre>
-          <h3 style={hStyle}>BRANCHES</h3>
+          <h3 style={hStyle}>{t('web.branches')}</h3>
           <ul>
             {branches.map((b, i) => (
               <li key={i}>{typeof b === 'string' ? b : JSON.stringify(b)}</li>
             ))}
           </ul>
-          <h3 style={hStyle}>LOG</h3>
+          <h3 style={hStyle}>{t('web.log')}</h3>
           <ul>
             {gitLog.map((c, i) => (
               <li key={i}>{typeof c === 'string' ? c : JSON.stringify(c)}</li>
@@ -346,8 +349,8 @@ export function MisAgentes() {
         </section>
 
         <section style={panelStyle} aria-label="Hive">
-          <h2 style={hStyle}>HIVE</h2>
-          <h3 style={hStyle}>FLEET</h3>
+          <h2 style={hStyle}>{t('web.hive')}</h2>
+          <h3 style={hStyle}>{t('web.fleet')}</h3>
           <ul>
             {fleet.map((f) => (
               <li key={f.id}>
@@ -355,15 +358,15 @@ export function MisAgentes() {
               </li>
             ))}
           </ul>
-          <h3 style={hStyle}>BOARD</h3>
+          <h3 style={hStyle}>{t('web.board')}</h3>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{board.slice(0, 2000)}</pre>
-          <h3 style={hStyle}>TASKS ({tasks.length})</h3>
+          <h3 style={hStyle}>{t('web.tasks', { count: tasks.length })}</h3>
           <ul>
             {tasks.slice(0, 20).map((t, i) => (
               <li key={i}>{typeof t === 'string' ? t : JSON.stringify(t)}</li>
             ))}
           </ul>
-          <h3 style={hStyle}>INBOX ({inbox.length})</h3>
+          <h3 style={hStyle}>{t('web.inboxCount', { count: inbox.length })}</h3>
           <ul>
             {inbox.slice(0, 20).map((m, i) => (
               <li key={i}>{typeof m === 'string' ? m : JSON.stringify(m)}</li>
@@ -376,9 +379,9 @@ export function MisAgentes() {
       </div>
 
       <section style={panelStyle} aria-label="Terminal">
-        <h2 style={hStyle}>TERMINAL</h2>
+        <h2 style={hStyle}>{t('web.terminal')}</h2>
         {!ptyId ? (
-          <button type="button" onClick={() => void spawnShell()}>Spawn shell</button>
+          <button type="button" onClick={() => void spawnShell()}>{t('web.spawnShell')}</button>
         ) : isElectron ? (
           <PtyTerminalView ptyId={ptyId} />
         ) : (
