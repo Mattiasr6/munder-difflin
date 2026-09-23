@@ -52,6 +52,9 @@ export function useWebAdopt(config: HarnessConfig | null): void {
         ]);
         if (!live.length || !reg?.agents) return;
         const store = useStore.getState();
+        const liveIds = new Set(live.map((p) => p.id));
+        const ownedPty = new Map<string, string>();
+        const resolved = new Map<string, { entry: RegistryAgent; ptyId: string }>();
         for (const p of live) {
           let agentId: string | null = null;
           let entry: RegistryAgent | null = null;
@@ -69,32 +72,67 @@ export function useWebAdopt(config: HarnessConfig | null): void {
             }
           }
           if (!agentId || !entry) continue;
-          if (store.agents.some((a) => a.id === agentId)) continue;
+          resolved.set(agentId, { entry, ptyId: p.id });
+          ownedPty.set(p.id, agentId);
+        }
+        // 1) Sanea tarjetas stale: una tarjeta cuyo ptyId vive pero pertenece a
+        // otro agente (p. ej. 'pty-god' de antes del split) se elimina; el dueño
+        // real se adopta/corrige abajo.
+        for (const a of store.agents) {
+          if (!a.ptyId || !liveIds.has(a.ptyId)) continue;
+          const owner = ownedPty.get(a.ptyId);
+          if (owner && owner !== a.id) store.removeAgent(a.id);
+        }
+        const after = useStore.getState();
+        // 2) Adopta faltantes y corrige existentes (isGod/nombre/ptyId pueden
+        // venir stale del roster local de una versión anterior del gateway).
+        for (const [agentId, { entry, ptyId }] of resolved) {
           const isGod = agentId === GOD_ID || entry.isGod === true;
+          const patch = {
+            name: entry.name || agentId,
+            cwd: entry.cwd || undefined,
+            provider: (entry.provider || 'claude') as Agent['provider'],
+            isGod,
+            isAssistant: entry.isAssistant === true,
+            ptyId,
+          };
+          const current = after.agents.find((a) => a.id === agentId);
+          if (current) {
+            const needs =
+              current.isGod !== patch.isGod ||
+              current.ptyId !== patch.ptyId ||
+              (patch.name && current.name !== patch.name);
+            if (needs) after.updateAgent(agentId, patch);
+            if (isGod) {
+              after.setGodStatus('ready');
+              if (!after.selectedId) after.select(agentId);
+            }
+            continue;
+          }
           const agent: Agent = {
             id: agentId,
-            name: entry.name || agentId,
+            name: patch.name || agentId,
             character: isGod ? 'michael' : 'dwight',
             accent: isGod ? 'lemon' : 'sky',
             description: entry.role || (isGod ? 'god — runs the floor' : 'agent'),
             project: 'hive',
             tmuxTarget: '',
-            cwd: entry.cwd || p.cwd,
+            cwd: entry.cwd || '',
             status: 'idle',
             action: isGod ? 'running the floor' : 'working',
             progress: 0,
             currentStation: 'desk',
-            ptyId: p.id,
-            command: p.command,
-            provider: (entry.provider || 'claude') as Agent['provider'],
+            ptyId,
+            command: '',
+            provider: patch.provider,
             isGod,
-            isAssistant: entry.isAssistant === true,
+            isAssistant: patch.isAssistant,
             recentTextTs: Date.now(),
           };
-          store.addAgent(agent);
+          after.addAgent(agent);
           if (isGod) {
-            store.setGodStatus('ready');
-            if (!store.selectedId) store.select(agentId);
+            after.setGodStatus('ready');
+            if (!after.selectedId) after.select(agentId);
           }
         }
       } catch {
